@@ -4,7 +4,7 @@
    %%NAME%% release %%VERSION%%
   ---------------------------------------------------------------------------*)
 
-(** (Un)reliable monotonic ticks for MirageOS.
+(** Best-effort monotonic ticks for MirageOS.
 
      {e Release %%VERSION%% - %%MAINTAINER%% } *)
 
@@ -13,7 +13,6 @@ open Rresult
 (** {1 Base MirageOS signatures}
 
     The following signatures are assumed to be part of MirageOS's signatures. *)
-
 
 (** The type for POSIX time clocks.
 
@@ -256,7 +255,7 @@ module type UNRELIABLE = sig
   include WATCHER with type t := t and type trigger := trigger
 end
 
-(** {1 Ticking reliably} *)
+(** {1 Best-effort ticking} *)
 
 (** The type for program suspension reliable, monotonic, clock tick
     watchers.

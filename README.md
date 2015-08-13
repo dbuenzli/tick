@@ -1,11 +1,11 @@
-Tick — (Un)reliable monotonic ticks for MirageOS
+Tick — Best-effort monotonic ticks for MirageOS
 -------------------------------------------------------------------------------
 Release %%VERSION%%
 
-Tick provides (un)reliable monotonic clock ticks for MirageOS. It
+Tick provides best-effort monotonic clock ticks for MirageOS. It
 defines a few functors that, given unreliable monotonic tick watchers,
-provides suspension and poweroff resistant monotonic tick watchers
-under a set of well defined assumptions.
+provides best-effort suspension and poweroff resistant monotonic tick
+watchers with well defined properties.
 
 Tick temporarily depends on [Rresult][2] and is distributed under the
 BSD3 license.

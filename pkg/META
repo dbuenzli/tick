@@ -1,4 +1,4 @@
-description = "(Un)reliable monotonic ticks for MirageOS"
+description = "Best-effort monotonic ticks for MirageOS"
 version = "%%VERSION%%"
 
 archive(byte) = ""
