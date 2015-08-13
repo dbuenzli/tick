@@ -1,0 +1,8 @@
+description = "(Un)reliable monotonic ticks for MirageOS"
+version = "%%VERSION%%"
+
+archive(byte) = ""
+archive(byte, plugin) = ""
+archive(native) = ""
+archive(native, plugin) = ""
+exists_if = "tick.cmi"
