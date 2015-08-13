@@ -69,6 +69,26 @@ module type MCLOCK = sig
       clock's nanosecond period [d]. *)
 end
 
+(** The type for monotonic clock ticks. *)
+module type MTICK = sig
+
+  (** {1 Tick tock} *)
+
+  type ns_span = int64
+  (** The type for nanosecond precision time spans. This is an
+      {e unsigned} 64-bit integer. It can measure up to approximatevely
+      584 Julian years before (silently) rolling over. *)
+
+  val tock : delay_ns:ns_span -> (ns_span -> unit) -> unit
+  (** [tock d f] calls [f t] in [d] monotonic nanosecond with
+      [t] the number of elapsed (measured using {!MCLOCK.elapsed_ns})
+      between the call to [tock] and [f]'s invocation.
+
+      {!MCLOCK} being used, [t] cannot be relied upon if
+      a {!LIFECYCLE.suspend} event occurs between the call to [tock]
+      and [f]'s invocation. *)
+end
+
 (** The type for program life cycle events.
 
     [LIFECYCLE] provides the ability to watch important events
@@ -173,7 +193,13 @@ module type KV = sig
       is guaranteed not to be called again. *)
 end
 
-(** The type for clock ticks watchers.
+
+(** {1 Tick watchers}
+
+    The following add a little bit more features to the base OS'
+    monotonic ticks. *)
+
+(** The type for clock tick watchers.
 
     [WATCHER] provides a base signature for watching nanosecond
     precision clock ticks. *)
@@ -225,43 +251,48 @@ module type WATCHER = sig
   (** [fold f acc] folds over all watchers that have {!waiting }[ t = true]. *)
 end
 
-(** The type for unreliable, monotonic, clock ticks watchers.
+(** The type for clock tick watchers with triggers as functions.
 
-    [UNRELIABLE] has the following properties. Given a watcher
+    [WATCHER_FUN] is like {!WATCHER} but defines {!trigger}s
+    as functions in which you get the the watcher. *)
+module type WATCHER_FUN = sig
+
+  (** {1 Function triggers} *)
+
+  type t
+  (** The type for suspension reliable watchers. *)
+
+  type trigger = t -> unit
+  (** The type for suspension reliable triggers. *)
+
+  include WATCHER with type t := t and type trigger := trigger
+end
+
+(** {1 Unreliable ticking} *)
+
+(**  Unreliable, monotonic, clock tick watchers.
+
+    [Make_unreliable] has the following properties. Given a watcher
     [w]:
     {ul
     {- If there is no {!LIFECYCLE.suspend} event while
        {!WATCHER.waiting}[ w] is [true]. The value of
        {!WATCHER.linger_ns}[ w] is an accurate and exact wall-clock time
        span.}
-    {- Watcher triggers being {{!trigger}functions} they are not
+    {- Watcher triggers being {{!WATCHER_FUN.trigger}functions} they are not
        persisted and do not survive
        a {!LIFECYCLE.poweroff} event.}}
 
     These properties are typically sufficient for watching small timeouts
-    in protocol implementations.
-
-    {b TODO.} Maybe this should be functorized over {!MCLOCK}. *)
-module type UNRELIABLE = sig
-
-  (** {1 Unreliable clock tick watchers} *)
-
-  type t
-  (** The type for unreliable watchers. *)
-
-  type trigger = t -> unit
-  (** The type for unreliable triggers. *)
-
-  include WATCHER with type t := t and type trigger := trigger
-end
+    in protocol implementations. *)
+module Make_unreliable (M : MCLOCK) (MT : MTICK) : WATCHER_FUN
 
 (** {1 Best-effort ticking} *)
 
-(** The type for program suspension reliable, monotonic, clock tick
+(** Best-effort, program suspension resistant, monotonic, clock tick
     watchers.
 
-    [SUSPENSION_RELIABLE] has the following properties. Given
-    a watcher [w]:
+    Given a watcher [w]:
     {ul
     {- If there is no {!LIFECYCLE.suspend} event while
        {!WATCHER.waiting}[ w] is [true], the value of
@@ -279,24 +310,16 @@ end
        at {!LIFECYCLE.suspend} and {!LIFECYCLE.resume} and no leap second
        occurs between these two events. The absolute value of {!PCLOCK} doesn't
        matter.}
-    {- Watcher triggers being {{!trigger}functions} they are not
+    {- Watcher triggers being {{!WATCHER_FUN.trigger}functions} they are not
        persisted and do not survive
        a {!LIFECYCLE.poweroff} event.}} *)
-module type SUSPENSION_RELIABLE = sig
+module Make_suspension_resistant : functor
+(P : PCLOCK) (M : MCLOCK) (MT : MTICK) (E : LIFECYCLE) -> WATCHER_FUN
 
-  (** {1 Suspension reliable clock tick watchers} *)
+(** The type for persistent triggers.
 
-  type t
-  (** The type for suspension reliable watchers. *)
-
-  type trigger = t -> unit
-  (** The type for suspension reliable triggers. *)
-
-  include WATCHER with type t := t and type trigger := trigger
-
-end
-
-(** Persistent triggers. *)
+    [PERSISTENT_TRIGGER] provides a type that tick watchers are able
+    to actuate and to serialize. *)
 module type PERSISTENT_TRIGGER = sig
 
   (** {1 Triggers} *)
@@ -304,21 +327,19 @@ module type PERSISTENT_TRIGGER = sig
   type t
   (** The type for persistent triggers. *)
 
-  val trigger : int64 -> int64 -> t -> unit
-  (** [trigger d t tr] is called whenever a watcher's trigger needs to
-      be triggered. [d] is the watcher's delay and [t] the actual
+  val actuate : int64 -> int64 -> t -> unit
+  (** [actuate d t tr] is called whenever a watcher's trigger needs to
+      be actuated. [d] is the watcher's delay and [t] the actual
       lingering time. *)
 
   val codec : (t -> string) * (string -> (t, R.msg) result)
   (** [codec] is a byte codec for triggers. *)
 end
 
-
-(** The type for program poweroff reliable, monotonic, clock tick
+(** Best-effort, program poweroff resistant, monotonic, clock tick
     watchers.
 
-    [POWEROFF_RELIABLE] has the following properties. Given
-    a watcher [w]:
+    Given a watcher [w]:
     {ul
     {- If there is no {!LIFECYCLE.suspend} event while
        {!WATCHER.waiting}[ w] is [true], the value of
@@ -350,18 +371,10 @@ end
     In this interface triggers can be {{!PERSISTENT_TRIGGER}persisted}.
     Note that trigger actuation occurs through the {!PERSISTENT_TRIGGER}
     interface. *)
-module type POWEROFF_RELIABLE = sig
-  include WATCHER
-end
-
-module Make_suspension_reliable : functor
-(P : PCLOCK) (M : MCLOCK) (U : UNRELIABLE) (E : LIFECYCLE) ->
-  SUSPENSION_RELIABLE
-
-module Make_poweroff_reliable : functor
-(P : PCLOCK) (M : MCLOCK) (U : UNRELIABLE) (E : LIFECYCLE)
+module Make_poweroff_resistant : functor
+(P : PCLOCK) (M : MCLOCK) (MT : MTICK) (E : LIFECYCLE)
 (T : PERSISTENT_TRIGGER)
-(Kv : KV) -> POWEROFF_RELIABLE with type trigger = T.t
+(Kv : KV) -> WATCHER with type trigger = T.t
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2015 Daniel C. Bünzli.
