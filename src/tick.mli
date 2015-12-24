@@ -16,28 +16,39 @@ open Rresult
 
 (** The type for POSIX time clocks.
 
-    [PCLOCK] provides access to POSIX calendar time. This time is
-    subject to operating system calendar time adjustement and can go
-    back in time, it should not be used to measure wall-clock time
-    spans. *)
+    [PCLOCK] provides access to POSIX time and the system current time
+    zone offset.
+
+    This time does not increase monotically and is subject to system
+    calendar time adjustements. It can go back in time, and as such
+    should not be used to measure wall-clock time spans. *)
 module type PCLOCK = sig
 
-  (** {1:posix POSIX time} *)
+  (** {1:posix POSIX Clock} *)
 
   val now_d_ps : unit -> int * int64
   (** [now_d_ps ()] is [(d, ps)] representing the POSIX time occuring
       at [d] * 86'400e12 + [ps] POSIX picoseconds from the epoch
       1970-01-01 00:00:00 UTC. [ps] is in the range
-      \[[0];[86_399_999_999_999_999L]\]. *)
+      \[[0];[86_399_999_999_999_999L]\]. By definition this time
+      is always on the UTC timeline.
+
+      @raise Sys_error if the time can't be determined. This exception
+      should only be catched at the toplevel of your program to
+      log and it and abort the program. It indicates a serious error
+      condition in the system. *)
 
   val period_d_ps : unit -> (int * int64) option
-  (** [period_d_ps ()] is if available [Some (d, ps)] representing the
-      clock's picosecond period [d] * 86'400e12 + [ps]. [ps] is in the
-      range \[[0];[86_399_999_999_999_999L]\]. *)
+  (** [period_d_ps ()] is [Some (d, ps)], representing the
+      clock's picosecond period [d] * 86'400e12 + [ps], if known.
+      [ps] is in the range \[[0];[86_399_999_999_999_999L]\]. *)
 
-  val current_tz_offset_s : unit -> int
-  (** [current_tz_offset_s ()] is the clock's current local time zone
-      offset to UTC in seconds. *)
+  (** {1:tz System time zone offset} *)
+
+  val current_tz_offset_s : unit -> int option
+  (** [current_tz_offset_s ()] is the system's current local time
+      zone offset to UTC in seconds, if know. This is the duration
+      local time - UTC time in seconds. *)
 end
 
 (** The type for monotonic time clocks.
